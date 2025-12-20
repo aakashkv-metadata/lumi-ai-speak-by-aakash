@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -14,6 +15,14 @@ export default function Signup() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signUp, user, isLoading: authLoading } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate("/chat");
+    }
+  }, [user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,17 +47,35 @@ export default function Signup() {
 
     setIsLoading(true);
 
-    // Simulate signup - replace with actual auth
-    setTimeout(() => {
-      localStorage.setItem("lumina_user", JSON.stringify({ email, name: email.split("@")[0] }));
+    const { error } = await signUp(email, password);
+
+    if (error) {
+      let errorMessage = error.message;
+      if (error.message.includes("User already registered")) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      }
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    } else {
       toast({
         title: "Account created!",
         description: "Welcome to Lumina AI.",
       });
       navigate("/chat");
-      setIsLoading(false);
-    }, 1000);
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
