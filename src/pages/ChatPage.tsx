@@ -6,6 +6,7 @@ import { Chat, Message } from "@/types/chat";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { UploadedFile } from "@/components/chat/FileUpload";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
@@ -18,12 +19,23 @@ const generateTitle = (content: string) => {
   return words.length > 30 ? words.substring(0, 30) + "..." : words;
 };
 
+// Convert file to base64 data URL
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function ChatPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
+  const [selectedModel, setSelectedModel] = useState("gpt-4o-mini");
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, session, isLoading: authLoading, signOut } = useAuth();
@@ -100,7 +112,8 @@ export default function ChatPage() {
   }, []);
 
   const streamChat = async (
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string; images?: string[] }>,
+    model: string,
     onDelta: (deltaText: string) => void,
     onDone: () => void
   ) => {
@@ -110,7 +123,7 @@ export default function ChatPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session?.access_token}`,
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, model }),
     });
 
     if (!resp.ok) {
@@ -177,8 +190,8 @@ export default function ChatPage() {
   };
 
   const handleSendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim() || !user) return;
+    async (content: string, files?: UploadedFile[]) => {
+      if ((!content.trim() && (!files || files.length === 0)) || !user) return;
 
       let currentChatId = activeChatId;
       let isNewChat = false;
@@ -253,10 +266,25 @@ export default function ChatPage() {
         // Get AI response with streaming
         setIsLoading(true);
 
+        // Convert image files to base64 data URLs
+        const imageDataUrls: string[] = [];
+        if (files && files.length > 0) {
+          for (const uploadedFile of files) {
+            if (uploadedFile.type === "image") {
+              const dataUrl = await fileToDataUrl(uploadedFile.file);
+              imageDataUrls.push(dataUrl);
+            }
+          }
+        }
+
         const chatMessages = chats.find((c) => c.id === currentChatId)?.messages || [];
         const allMessages = [
           ...chatMessages.map((m) => ({ role: m.role, content: m.content })),
-          { role: "user", content },
+          { 
+            role: "user", 
+            content: content || "What's in this image?",
+            ...(imageDataUrls.length > 0 && { images: imageDataUrls })
+          },
         ];
 
         let assistantContent = "";
@@ -264,6 +292,7 @@ export default function ChatPage() {
 
         await streamChat(
           allMessages,
+          selectedModel,
           (chunk) => {
             assistantContent += chunk;
             setChats((prev) =>
@@ -356,6 +385,8 @@ export default function ChatPage() {
           isLoading={isLoading}
           userName={user.email?.split("@")[0] || "User"}
           onSendMessage={handleSendMessage}
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
         />
       </main>
     </div>

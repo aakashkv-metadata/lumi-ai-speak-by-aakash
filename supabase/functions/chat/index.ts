@@ -13,7 +13,8 @@ You communicate clearly, concisely, and accurately.
 You structure responses using headings, bullet points, and examples when helpful.
 You do not hallucinate facts.
 If you do not know something, you say so honestly.
-You remember context within the conversation.`;
+You remember context within the conversation.
+When images are shared with you, analyze them carefully and provide helpful insights.`;
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -27,9 +28,34 @@ serve(async (req) => {
       throw new Error('OPENAI_API_KEY is not configured');
     }
 
-    const { messages } = await req.json();
+    const { messages, model = 'gpt-4o-mini' } = await req.json();
     
-    console.log('Received messages:', JSON.stringify(messages).slice(0, 200));
+    console.log('Received request with model:', model);
+    console.log('Messages count:', messages.length);
+
+    // Format messages for OpenAI API (handle image content)
+    const formattedMessages = messages.map((msg: any) => {
+      if (msg.images && msg.images.length > 0) {
+        // Message with images - use content array format
+        const content: any[] = [];
+        
+        if (msg.content) {
+          content.push({ type: 'text', text: msg.content });
+        }
+        
+        for (const imageUrl of msg.images) {
+          content.push({
+            type: 'image_url',
+            image_url: { url: imageUrl },
+          });
+        }
+        
+        return { role: msg.role, content };
+      }
+      
+      // Regular text message
+      return { role: msg.role, content: msg.content };
+    });
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -38,10 +64,10 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          ...messages
+          ...formattedMessages
         ],
         stream: true,
       }),
