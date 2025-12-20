@@ -2,7 +2,6 @@ import { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { User, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 interface ChatMessageProps {
   message: Message;
@@ -39,7 +38,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {isUser ? "You" : "Lumina AI"}
           </div>
           <div className="markdown-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown>
               {message.content}
             </ReactMarkdown>
           </div>
